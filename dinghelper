@@ -1,0 +1,138 @@
+#! /usr/bin/php
+<?php
+if (php_sapi_name() != 'cli') {
+    exit('请在shell下执行!');
+}
+
+set_time_limit(0);
+mb_internal_encoding('UTF-8');
+ini_set("memory_limit", "128M");
+ini_set("auto_detect_line_endings", true);
+
+if ($argc < 1) {
+    exit("请输入参数！\n");
+} elseif ($argc == 2 && is_dir(realpath($argv[1]))) {
+    exit("ddcat: {$argv[1]}: 是一个目录\n");
+}
+
+$minus = 0; #减
+$params = array();
+$except = array();
+$plist = array(
+    '--help' => array(),
+    '--H' => array(),
+    '--version' => array(),
+    '--V' => array(),
+    '--find' => array(
+        '--detail',
+        '--count',
+    ),
+);
+$p = array_keys($plist);
+
+for ($i = 1; $i < $argc; $i++) {
+    if (substr($argv[$i], 0, 2) == '--') {
+        $minus = 1;
+        if (substr_count($argv[$i], "=") > 0) {
+            list($option, $value) = explode("=", $argv[$i], 2);
+            $params[trim($option)] = trim($value);
+        } else {
+            $params[$argv[$i]] = $argv[$i];
+        }
+        $except[] = $i;
+    }
+}
+$curr = "";
+foreach ($params as $k => $v) {
+    if (in_array($k, $p)) {
+        $curr = $k;
+    } else {
+        if ($curr && !in_array($k, $plist[$curr]))
+            exit("dinghelper：无法识别的选项“{$k}”\n请尝试执行\"ddcat --help\"来获取更多信息。\n");
+    }
+}
+foreach ($p as $v) {
+    if (isset($params[$v])) {
+        switch ($v) {
+            case "--help":
+            case "--H":
+                $str = "用法：dinghelper [选项]...
+--help,    --H          查看帮助
+--version, --V          查看当前版本
+--find=\"\"               查找文本
+           --detail       查找结果显示文件名
+           --count      结果统计
+如果dinghelper有错误，请向352926@qq.com报告，谢谢\n";
+                exit($str);
+                break;
+            case "--version":
+            case "--V":
+                $str = "dinghelper 1.0 2013-05-29\nAuthor:黄丁丁 <352926@qq.com>\nPHP:" . PHP_VERSION . PHP_EOL;
+                exit($str);
+                break;
+            case "--find":
+                if ($argc <= 2) {
+                    exit("请指定文件路径！如：\ndinghelper --find=\"xxx\" /data0/*\n");
+                }
+                if (empty($params['--find'])) {
+                    exit("--find=\"\" 没有指定要查找的内容\n");
+                }
+                $f_idx = array(
+                    'all' => 1,
+                    'find' => 0,
+                );
+                for ($i = 1; $i < $argc; $i++) {
+                    if (in_array($i, $except)) continue;
+                    $f = realpath($argv[$i]);
+
+                    if (!file_exists($f)) {
+                        echo "dinghelper: {$argv[$i]}: 没有那个文件或目录\n";
+                        continue;
+                    }
+                    if (!is_readable($f)) {
+                        echo "dinghelper: {$argv[$i]}: 权限不够\n";
+                        continue;
+                    }
+                    if (is_dir($f)) {
+                        continue;
+                    }
+                    $h = fopen($f, "r");
+                    if ($h) {
+                        $j = 1;
+                        while (!feof($h)) {
+                            $line = fgets($h);
+                            $detail = "";
+                            if (strpos($line, $params['--find']) !== false) {
+                                $f_idx['find']++;
+                                $line = str_replace($params['--find'], setColor($params['--find']), $line);
+                                if (isset($params['--detail']))
+                                    $detail = "[file:{$argv[$i]},line:{$j}] ";
+                                echo $detail . $line;
+                            }
+                            $j++;
+                        }
+                        fclose($h);
+                        $f_idx['all']++;
+                    }
+                }
+                if (isset($params['--count'])) {
+                    echo "dinghelper：总共遍历{$f_idx['all']}个文件，找到{$f_idx['find']}处！O(∩_∩)O~\n";
+                }
+                break;
+        }
+    }
+}
+
+function setColor($str, $color = "red")
+{
+    $c = array(
+        'red' => '31',
+        'green' => '32',
+        'yellow' => '34',
+        'blue' => '35',
+    );
+    if (!isset($c[$color])) {
+        return $str;
+    }
+    return chr(27) . "[{$c[$color]};1m" . $str . chr(27) . "[0m";
+}
